@@ -25,3 +25,5 @@ dist-ssr
 
 # 后端运行数据（照片、提交记录）
 server/data/
+# 后端运行数据（实际位于 <repo>/data/）
+data/
