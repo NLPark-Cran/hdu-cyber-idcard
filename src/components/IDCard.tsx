@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { U, BLUE, FONT_KAI, FONT_SONG, FONT_UNION } from "@/lib/idcard";
+import { U, BLUE } from "@/lib/idcard";
 
 import frontStripA from "@/assets/front-strip-a.png";
 import frontStripB from "@/assets/front-strip-b.png";
@@ -22,7 +22,7 @@ type BoxProps = {
   style?: React.CSSProperties;
 };
 
-/** 按 PPT 单位定位的绝对定位容器，U 倍映射为像素 */
+/** 按版面单位定位的绝对定位容器，U 倍映射为像素 */
 function Box({ x, y, w, h, children, style }: BoxProps) {
   return (
     <div
@@ -79,6 +79,12 @@ const cardBase: React.CSSProperties = {
   flexShrink: 0,
 };
 
+// 新版样式（之一同学提供的 PDF）：粗黑体标题 + 白色偏移阴影
+const FONT_HEI =
+  '"Microsoft YaHei","PingFang SC","Hiragino Sans GB","SimHei",sans-serif';
+const FONT_SLOGAN = FONT_HEI;
+const FONT_UNION = FONT_HEI;
+
 /** 正面：创业 + UNION + logo */
 export const IDCardFront = forwardRef<HTMLDivElement>(function IDCardFront(
   _,
@@ -88,23 +94,24 @@ export const IDCardFront = forwardRef<HTMLDivElement>(function IDCardFront(
     <div ref={ref} style={cardBase}>
       {/* 左边缘深蓝色竖条 */}
       <Box x={6.2} y={0} w={3} h={162.2} style={{ background: BLUE }} />
-      {/* 右上蓝色几何竖条（两层素材，顺序与 PPT 一致） */}
+      {/* 右上蓝色几何竖条（两层素材，顺序与原版一致） */}
       <Img src={frontStripA} x={123.8} y={0} w={29.2} h={106.8} />
       <Img src={frontStripB} x={123.8} y={0} w={29.2} h={107.2} />
       {/* 顶部五个小方点 */}
       <Box x={95.1} y={10.3} w={27} h={3} style={{ background: BLUE }} />
-      {/* 创业 */}
+      {/* 创业（粗黑体） */}
       <Box
-        x={41}
-        y={28.7}
-        w={70}
-        h={41.8}
+        x={42}
+        y={28}
+        w={68}
+        h={44.2}
         style={{
           color: BLUE,
           fontSize: 34 * U,
-          lineHeight: 1,
-          fontFamily: FONT_KAI,
-          letterSpacing: -0.35 * U,
+          lineHeight: 1.3,
+          fontFamily: FONT_HEI,
+          fontWeight: 900,
+          letterSpacing: 0,
         }}
       >
         创业
@@ -113,17 +120,18 @@ export const IDCardFront = forwardRef<HTMLDivElement>(function IDCardFront(
       <Img src={logo} x={29.2} y={73.9} w={94.5} h={94.5} />
       {/* 左侧内竖线（长） */}
       <Box x={16.1} y={79.7} w={3} h={117.6} style={{ background: BLUE }} />
-      {/* UNION */}
+      {/* UNION（粗体，位置较旧版下移） */}
       <Box
-        x={40}
-        y={173.6}
-        w={73.1}
-        h={22.6}
+        x={41}
+        y={177.2}
+        w={71}
+        h={18}
         style={{
           color: BLUE,
           fontSize: 18 * U,
           lineHeight: 1,
           fontFamily: FONT_UNION,
+          fontWeight: 700,
           letterSpacing: 1.6 * U,
         }}
       >
@@ -138,15 +146,15 @@ export const IDCardFront = forwardRef<HTMLDivElement>(function IDCardFront(
       <Img src={frontSqDark} x={134.1} y={216.2} w={18.9} h={26.1} />
       {/* 底部标语 */}
       <Box
-        x={31.2}
+        x={32.2}
         y={221.4}
-        w={90}
-        h={11.3}
+        w={88}
+        h={10.2}
         style={{
           color: "#000",
           fontSize: 8 * U,
           lineHeight: 1,
-          fontFamily: FONT_SONG,
+          fontFamily: FONT_SLOGAN,
         }}
       >
         一群人｜一件事｜一辈子
@@ -161,9 +169,22 @@ type BackProps = {
   dept: string;
 };
 
-/** 背面：工作证竖排字 + 照片 + 姓名/部门 */
+/** 背面：工作证竖排大字（白色偏移阴影）+ 照片 + 姓名/部门 */
 export const IDCardBack = forwardRef<HTMLDivElement, BackProps>(
   function IDCardBack({ photo, name, dept }, ref) {
+    // 竖排 工作证：蓝色字 + 右侧白色错位阴影（新版样式）
+    const charStyle = (fill: string): React.CSSProperties => ({
+      color: fill,
+      fontSize: 37.8 * U,
+      lineHeight: 1.3,
+      fontFamily: FONT_HEI,
+      fontWeight: 900,
+    });
+    const chars: { ch: string; y: number }[] = [
+      { ch: "工", y: 32.5 },
+      { ch: "作", y: 97.2 },
+      { ch: "证", y: 161.4 },
+    ];
     return (
       <div ref={ref} style={cardBase}>
         {/* 右侧蓝色几何竖条 */}
@@ -171,7 +192,7 @@ export const IDCardBack = forwardRef<HTMLDivElement, BackProps>(
         {/* 底部通栏横条 */}
         <Img src={backBar} x={0} y={215.4} w={153} h={26.8} />
         <Img src={backBarLeft} x={0} y={215.4} w={120.6} h={26.8} />
-        {/* 左上两排蓝色小方点（PPT 中为点线） */}
+        {/* 左上两排蓝色小方点（原版中为点线） */}
         <Box
           x={0}
           y={12.9}
@@ -191,59 +212,23 @@ export const IDCardBack = forwardRef<HTMLDivElement, BackProps>(
           <img
             src={photo ?? photoPlaceholder}
             alt="证件照"
-            crossOrigin="anonymous"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         </Box>
         {/* 淡色 logo 水印 */}
         <Img src={backWatermark} x={3.6} y={132} w={94.5} h={94.5} />
-        {/* 竖排 工作证 */}
-        <Box
-          x={95.9}
-          y={32.7}
-          w={39.8}
-          h={46.1}
-          style={{
-            color: BLUE,
-            fontSize: 37.5 * U,
-            lineHeight: 1,
-            fontFamily: FONT_KAI,
-            letterSpacing: -0.5 * U,
-          }}
-        >
-          工
-        </Box>
-        <Box
-          x={95.9}
-          y={78.2}
-          w={39.8}
-          h={53.6}
-          style={{
-            color: BLUE,
-            fontSize: 37.5 * U,
-            lineHeight: 1.428,
-            fontFamily: FONT_KAI,
-            letterSpacing: -0.5 * U,
-          }}
-        >
-          作
-        </Box>
-        <Box
-          x={95.9}
-          y={131.8}
-          w={39.8}
-          h={53.6}
-          style={{
-            color: BLUE,
-            fontSize: 37.5 * U,
-            lineHeight: 1.428,
-            fontFamily: FONT_KAI,
-            letterSpacing: -0.5 * U,
-          }}
-        >
-          证
-        </Box>
-        {/* 姓名 / 部门（照片正下方居中） */}
+        {/* 竖排 工作证：先白色阴影（右移 5.1），再蓝色字 */}
+        {chars.map((c) => (
+          <Box key={`w-${c.ch}`} x={102.0} y={c.y} w={37.8} h={49.1} style={charStyle("#ffffff")}>
+            {c.ch}
+          </Box>
+        ))}
+        {chars.map((c) => (
+          <Box key={`b-${c.ch}`} x={96.9} y={c.y} w={37.8} h={49.1} style={charStyle(BLUE)}>
+            {c.ch}
+          </Box>
+        ))}
+        {/* 姓名 / 部门（照片正下方居中，粗体） */}
         <Box
           x={8.55}
           y={133}
@@ -254,7 +239,8 @@ export const IDCardBack = forwardRef<HTMLDivElement, BackProps>(
             color: "#000",
             fontSize: 12 * U,
             lineHeight: 1.25,
-            fontFamily: FONT_KAI,
+            fontFamily: FONT_HEI,
+            fontWeight: 700,
             whiteSpace: "nowrap",
           }}
         >
@@ -270,7 +256,8 @@ export const IDCardBack = forwardRef<HTMLDivElement, BackProps>(
             color: "#000",
             fontSize: 9.5 * U,
             lineHeight: 1.25,
-            fontFamily: FONT_KAI,
+            fontFamily: FONT_HEI,
+            fontWeight: 700,
             whiteSpace: "nowrap",
           }}
         >
@@ -278,15 +265,15 @@ export const IDCardBack = forwardRef<HTMLDivElement, BackProps>(
         </Box>
         {/* 底部标语 */}
         <Box
-          x={31.2}
-          y={221.4}
-          w={90}
-          h={11.3}
+          x={29.9}
+          y={221}
+          w={88}
+          h={10.2}
           style={{
             color: "#000",
             fontSize: 8 * U,
             lineHeight: 1,
-            fontFamily: FONT_SONG,
+            fontFamily: FONT_SLOGAN,
           }}
         >
           一群人｜一件事｜一辈子

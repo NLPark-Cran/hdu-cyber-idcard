@@ -11,8 +11,16 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -41,6 +49,14 @@ import {
   type ImageFormat,
 } from "@/lib/exportImage";
 import { parseImportZip } from "@/lib/importZip";
+
+const DEPTS = [
+  "主席团",
+  "综合创管中心",
+  "项目管理中心",
+  "文化创意中心",
+  "创新资源中心",
+];
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -78,6 +94,8 @@ export default function Admin() {
   }>({ photo: null, name: "", dept: "" });
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
+  const [filterDept, setFilterDept] = useState("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const frontRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -85,11 +103,58 @@ export default function Admin() {
   const loadList = useCallback(async () => {
     try {
       setRecords(await adminList());
+      setSelected(new Set());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "列表加载失败");
       if ((e as { status?: number }).status === 401) setAuthed(false);
     }
   }, []);
+
+  const filtered = useCallback(
+    () =>
+      filterDept === "all"
+        ? records
+        : records.filter((r) => r.dept === filterDept),
+    [records, filterDept]
+  );
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const list = filtered();
+    setSelected((s) =>
+      s.size === list.length && list.length > 0 ? new Set() : new Set(list.map((r) => r.id))
+    );
+  };
+
+  const batchDelete = async () => {
+    const list = records.filter((r) => selected.has(r.id));
+    if (!list.length) return;
+    if (!window.confirm(`确定删除选中的 ${list.length} 条记录吗？此操作不可恢复。`)) return;
+    setBusy("batch-delete");
+    let ok = 0;
+    try {
+      for (const rec of list) {
+        try {
+          await deleteSubmission(rec.id);
+          ok++;
+        } catch {
+          toast.error(`删除 ${rec.name} 失败`);
+        }
+      }
+      toast.success(`已删除 ${ok} 条记录`);
+      await loadList();
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (authed) loadList();
@@ -167,10 +232,11 @@ export default function Admin() {
     setBusy(`all-${format}`);
     const ext = formatExt(format);
     const entries: { name: string; blob: Blob }[] = [];
+    const list = filtered();
     try {
-      for (let i = 0; i < records.length; i++) {
-        const rec = records[i];
-        setProgress(`正在导出 ${i + 1}/${records.length}：${rec.name}`);
+      for (let i = 0; i < list.length; i++) {
+        const rec = list[i];
+        setProgress(`正在导出 ${i + 1}/${list.length}：${rec.name}`);
         const photo = await photoDataUrl(rec);
         setExportProps({ photo, name: rec.name, dept: rec.dept });
         const { front, back } = await renderPair(format);
@@ -178,8 +244,8 @@ export default function Admin() {
         entries.push({ name: `${prefix}-正面.${ext}`, blob: front });
         entries.push({ name: `${prefix}-背面.${ext}`, blob: back });
       }
-      await downloadZip(entries, `工作证全部-${format.toUpperCase()}.zip`);
-      toast.success(`已导出全部 ${records.length} 人（${format.toUpperCase()}）`);
+      await downloadZip(entries, `工作证${filterDept === "all" ? "全部" : filterDept}-${format.toUpperCase()}.zip`);
+      toast.success(`已导出 ${list.length} 人（${format.toUpperCase()}）`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "批量导出失败");
     } finally {
@@ -323,8 +389,37 @@ export default function Admin() {
             <RefreshCw className="mr-1.5 h-4 w-4" />
             刷新
           </Button>
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">筛选</span>
+            <Select value={filterDept} onValueChange={setFilterDept}>
+              <SelectTrigger className="w-44 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部部门</SelectItem>
+                {DEPTS.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selected.size > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={batchDelete}
+              disabled={busy !== null}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              批量删除（{selected.size}）
+            </Button>
+          )}
           <span className="text-sm text-muted-foreground ml-auto">
-            共 {records.length} 条记录
+            {filterDept === "all"
+              ? `共 ${records.length} 条记录`
+              : `${filterDept}：${filtered().length} / 共 ${records.length} 条`}
           </span>
         </div>
 
@@ -349,6 +444,15 @@ export default function Admin() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={
+                        filtered().length > 0 && selected.size === filtered().length
+                      }
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="全选"
+                    />
+                  </TableHead>
                   <TableHead className="w-16">照片</TableHead>
                   <TableHead>姓名</TableHead>
                   <TableHead>部门</TableHead>
@@ -357,15 +461,22 @@ export default function Admin() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {records.length === 0 && (
+                {filtered().length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
                       暂无记录，等待成员提交或 ZIP 导入
                     </TableCell>
                   </TableRow>
                 )}
-                {records.map((rec) => (
+                {filtered().map((rec) => (
                   <TableRow key={rec.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(rec.id)}
+                        onCheckedChange={() => toggleSelect(rec.id)}
+                        aria-label={`选择 ${rec.name}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <PhotoThumb photoFile={rec.photoFile} name={rec.name} />
                     </TableCell>
