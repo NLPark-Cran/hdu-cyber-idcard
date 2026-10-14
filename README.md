@@ -44,7 +44,7 @@ list.csv：
 - 前端：React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui
 - 裁剪：`react-easy-crop`；图片导出：`html-to-image` + `utif`（TIFF）+ `jszip`
 - 后端：`server/server.cjs`，纯 Node.js 标准库实现，零依赖
-  - 数据保存在 `server/data/`（submissions.json + photos/）
+  - 数据保存在 `data/`（submissions.json + photos/，位于仓库根目录，已 gitignore）
 
 ## 本地开发
 

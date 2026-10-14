@@ -18,7 +18,7 @@ scp /tmp/idcard.tar.gz root@103.42.182.181:/tmp/
 mkdir -p /var/www/id.hub.tt2.li /opt/idcard
 tar xzf /tmp/idcard.tar.gz -C /var/www/id.hub.tt2.li dist
 tar xzf /tmp/idcard.tar.gz -C /opt/idcard server
-mkdir -p /opt/idcard/server/data
+mkdir -p /opt/idcard/data   # 后端数据目录（submissions.json + photos/）
 ```
 
 说明：VPS 已有 Node v24，后端零依赖，无需 npm install。
