@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, Route, Routes } from "react-router";
 import { toPng } from "html-to-image";
-import { Download, ImagePlus, RotateCcw, UploadCloud } from "lucide-react";
+import {
+  CloudUpload,
+  Download,
+  ImagePlus,
+  RotateCcw,
+  Settings,
+  UploadCloud,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,7 +17,9 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { IDCardFront, IDCardBack } from "@/components/IDCard";
 import { CropDialog, readFileAsDataURL } from "@/components/CropDialog";
+import { submitRecord } from "@/lib/api";
 import { CARD_W } from "@/lib/idcard";
+import Admin from "@/pages/Admin";
 
 const DEPT_SUGGESTIONS = [
   "主席团",
@@ -23,12 +33,13 @@ const DEPT_SUGGESTIONS = [
   "财务部",
 ];
 
-export default function App() {
+function Home() {
   const [name, setName] = useState(() => localStorage.getItem("idcard.name") ?? "");
   const [dept, setDept] = useState(() => localStorage.getItem("idcard.dept") ?? "");
   const [photo, setPhoto] = useState<string | null>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"front" | "back" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const frontRef = useRef<HTMLDivElement>(null);
@@ -61,9 +72,9 @@ export default function App() {
       if (!node) return;
       setExporting(side);
       try {
+        await document.fonts.ready;
         const dataUrl = await toPng(node, {
           pixelRatio: 4, // 导出 1224 x 1940，供打印工作证
-          cacheBust: true,
         });
         const a = document.createElement("a");
         a.download = `工作证-${side === "front" ? "正面" : "背面"}-${name || "未命名"}.png`;
@@ -79,16 +90,41 @@ export default function App() {
     [name]
   );
 
+  const handleSubmit = async () => {
+    const n = name.trim();
+    if (!n) {
+      toast.error("请先填写姓名再提交");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const r = await submitRecord({ name: n, dept: dept.trim(), photo });
+      toast.success(r.updated ? "已更新服务器上的记录" : "已提交到服务器，谢谢！");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "提交失败，请检查网络后重试");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-5">
-          <h1 className="text-xl font-bold tracking-wide">
-            杭电创业联盟 · 工作证制作
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            上传证件照并填写信息，实时预览工作证效果，一键下载高清 PNG。
-          </p>
+        <div className="mx-auto max-w-6xl px-4 py-5 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold tracking-wide">
+              杭电创业联盟 · 工作证制作
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              上传证件照并填写信息，实时预览工作证效果，一键下载高清 PNG。
+            </p>
+          </div>
+          <Link to="/admin">
+            <Button variant="outline" size="sm">
+              <Settings className="mr-1.5 h-4 w-4" />
+              管理员入口
+            </Button>
+          </Link>
         </div>
       </header>
 
@@ -193,9 +229,13 @@ export default function App() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">导出</CardTitle>
+              <CardTitle className="text-base">提交与导出</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
+              <Button onClick={handleSubmit} disabled={submitting}>
+                <CloudUpload className="mr-1.5 h-4 w-4" />
+                {submitting ? "提交中…" : "提交到创盟服务器"}
+              </Button>
               <Button
                 onClick={() => exportCard("front")}
                 disabled={exporting !== null}
@@ -207,13 +247,14 @@ export default function App() {
               <Button
                 onClick={() => exportCard("back")}
                 disabled={exporting !== null}
+                variant="outline"
               >
                 <Download className="mr-1.5 h-4 w-4" />
                 {exporting === "back" ? "导出中…" : "下载背面 PNG"}
               </Button>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                导出尺寸 1224 × 1940 px（4 倍清晰度），与 PPT
-                导出图片等效，可直接用于工作证打印。
+                提交后管理员可在后台统一导出所有人的工作证；自行下载的 PNG 为
+                1224 × 1940 px（4 倍清晰度），可直接用于打印。
               </p>
             </CardContent>
           </Card>
@@ -261,7 +302,18 @@ export default function App() {
           toast.success("照片已更新");
         }}
       />
-      <Toaster richColors position="top-center" />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/admin" element={<Admin />} />
+      </Routes>
+      <Toaster richColors position="top-center" />
+    </>
   );
 }

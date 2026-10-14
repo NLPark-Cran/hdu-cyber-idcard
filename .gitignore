@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 后端运行数据（照片、提交记录）
+server/data/
