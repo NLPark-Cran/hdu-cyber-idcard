@@ -40,6 +40,38 @@ function Box({ x, y, w, h, children, style }: BoxProps) {
   );
 }
 
+/** 蓝色小方点排：与 PDF 原版一致的几何（方点，非 border dotted——dotted 在不同浏览器/导出链路会渲染成圆点） */
+function DotRow({
+  x,
+  y,
+  count,
+  size = 2.4,
+  pitch = 6.0,
+}: {
+  x: number;
+  y: number;
+  count: number;
+  size?: number;
+  pitch?: number;
+}) {
+  return (
+    <Box
+      x={x}
+      y={y}
+      w={pitch * (count - 1) + size}
+      h={size}
+      style={{ display: "flex", alignItems: "center", gap: (pitch - size) * U }}
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          style={{ width: size * U, height: size * U, background: BLUE, flexShrink: 0 }}
+        />
+      ))}
+    </Box>
+  );
+}
+
 function Img({
   src,
   x,
@@ -99,8 +131,8 @@ export const IDCardFront = forwardRef<HTMLDivElement>(function IDCardFront(
       {/* 右上蓝色几何竖条（两层素材，顺序与原版一致） */}
       <Img src={frontStripA} x={123.8} y={0} w={29.2} h={106.8} />
       <Img src={frontStripB} x={123.8} y={0} w={29.2} h={107.2} />
-      {/* 顶部五个小方点 */}
-      <Box x={95.1} y={10.3} w={27} h={3} style={{ background: BLUE }} />
+      {/* 顶部五个小方点（与 PDF 原版一致的方点排） */}
+      <DotRow x={95.1} y={10.3} count={5} size={2.8} pitch={6.05} />
       {/* 创业（ID 觉醒黑，提取自 PDF） */}
       <Box
         x={42}
@@ -121,7 +153,9 @@ export const IDCardFront = forwardRef<HTMLDivElement>(function IDCardFront(
       <Img src={logo} x={29.2} y={73.9} w={94.5} h={94.5} />
       {/* 左侧内竖线（长） */}
       <Box x={16.1} y={79.7} w={3} h={117.6} style={{ background: BLUE }} />
-      {/* UNION（Canva 标题粗黑，位置较旧版下移） */}
+      {/* 左下浅蓝色块 */}
+      <Img src={frontBlockLight} x={0} y={186.7} w={102} h={29.2} />
+      {/* UNION（Canva 标题粗黑；注意必须排在色块之后绘制，保证文字压在色块上，与 PDF 原版一致） */}
       <Box
         x={41}
         y={177.2}
@@ -137,8 +171,6 @@ export const IDCardFront = forwardRef<HTMLDivElement>(function IDCardFront(
       >
         UNION
       </Box>
-      {/* 左下浅蓝色块 */}
-      <Img src={frontBlockLight} x={0} y={186.7} w={102} h={29.2} />
       {/* 竖线穿过色块处留白断口 */}
       <Box x={16.1} y={186.7} w={3} h={12.1} style={{ background: "#fff" }} />
       {/* 右下双色小方块 */}
@@ -191,21 +223,9 @@ export const IDCardBack = forwardRef<HTMLDivElement, BackProps>(
         {/* 底部通栏横条 */}
         <Img src={backBar} x={0} y={215.4} w={153} h={26.8} />
         <Img src={backBarLeft} x={0} y={215.4} w={120.6} h={26.8} />
-        {/* 左上两排蓝色小方点（原版中为点线） */}
-        <Box
-          x={0}
-          y={12.9}
-          w={62.7}
-          h={3}
-          style={{ borderTop: `${3 * U}px dotted ${BLUE}` }}
-        />
-        <Box
-          x={0}
-          y={19.8}
-          w={44.5}
-          h={3}
-          style={{ borderTop: `${3 * U}px dotted ${BLUE}` }}
-        />
+        {/* 左上两排蓝色小方点（与 PDF 原版一致：11 + 8 个方点；不用 border dotted，避免渲染成圆点） */}
+        <DotRow x={0} y={12.9} count={11} size={2.4} pitch={6.0} />
+        <DotRow x={0} y={19.8} count={8} size={2.4} pitch={6.0} />
         {/* 照片区（默认占位图，上传后替换） */}
         <Box x={23.2} y={53.2} w={50.7} h={71} style={{ background: "#fff" }}>
           <img
