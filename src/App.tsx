@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Route, Routes } from "react-router";
-import { toPng } from "html-to-image";
 import {
   CloudUpload,
   Download,
@@ -13,15 +12,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { IDCardFront, IDCardBack } from "@/components/IDCard";
 import { CropDialog, readFileAsDataURL } from "@/components/CropDialog";
 import { submitRecord } from "@/lib/api";
+import {
+  downloadBlob,
+  formatExt,
+  nodeToBlob,
+  type ImageFormat,
+} from "@/lib/exportImage";
 import { CARD_W } from "@/lib/idcard";
 import Admin from "@/pages/Admin";
 
-const DEPT_SUGGESTIONS = [
+const DEPTS = [
   "主席团",
   "综合创管中心",
   "项目管理中心",
@@ -31,10 +43,15 @@ const DEPT_SUGGESTIONS = [
 
 function Home() {
   const [name, setName] = useState(() => localStorage.getItem("idcard.name") ?? "");
-  const [dept, setDept] = useState(() => localStorage.getItem("idcard.dept") ?? "");
+  const [dept, setDept] = useState(() => {
+    const saved = localStorage.getItem("idcard.dept") ?? "";
+    // 旧版本可能存过自由文本，不在现有部门列表里则重置
+    return DEPTS.includes(saved) ? saved : "";
+  });
   const [photo, setPhoto] = useState<string | null>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"front" | "back" | null>(null);
+  const [format, setFormat] = useState<ImageFormat>("png");
   const [submitting, setSubmitting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,21 +86,21 @@ function Home() {
       setExporting(side);
       try {
         await document.fonts.ready;
-        const dataUrl = await toPng(node, {
-          pixelRatio: 4, // 导出 1224 x 1940，供打印工作证
-        });
-        const a = document.createElement("a");
-        a.download = `工作证-${side === "front" ? "正面" : "背面"}-${name || "未命名"}.png`;
-        a.href = dataUrl;
-        a.click();
-        toast.success("已下载 PNG");
+        // pixelRatio 4：导出 1224 x 1940，供打印工作证
+        const blob = await nodeToBlob(node, format);
+        const sideLabel = side === "front" ? "正面" : "背面";
+        downloadBlob(
+          blob,
+          `工作证-${sideLabel}-${name || "未命名"}.${formatExt(format)}`
+        );
+        toast.success(`已下载 ${format === "tiff" ? "TIF" : "PNG"}`);
       } catch {
         toast.error("导出失败，请重试");
       } finally {
         setExporting(null);
       }
     },
-    [name]
+    [name, format]
   );
 
   const handleSubmit = async () => {
@@ -108,11 +125,9 @@ function Home() {
       <header className="border-b bg-white">
         <div className="mx-auto max-w-6xl px-4 py-5 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold tracking-wide">
-              杭电创业联盟 · 工作证制作
-            </h1>
+            <h1 className="text-xl font-bold tracking-wide">创盟工作证</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              上传证件照并填写信息，实时预览工作证效果，一键下载高清 PNG。
+              上传证件照并填写信息，实时预览工作证效果，可下载 PNG 或 TIF。
             </p>
           </div>
           <Link to="/admin">
@@ -143,20 +158,19 @@ function Home() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="dept">部门</Label>
-                <Input
-                  id="dept"
-                  placeholder="请输入或选择部门"
-                  value={dept}
-                  maxLength={10}
-                  onChange={(e) => setDept(e.target.value)}
-                  list="dept-suggestions"
-                />
-                <datalist id="dept-suggestions">
-                  {DEPT_SUGGESTIONS.map((d) => (
-                    <option key={d} value={d} />
-                  ))}
-                </datalist>
+                <Label>部门</Label>
+                <Select value={dept} onValueChange={setDept}>
+                  <SelectTrigger id="dept">
+                    <SelectValue placeholder="请选择部门" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPTS.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
@@ -228,29 +242,48 @@ function Home() {
               <CardTitle className="text-base">提交与导出</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <Button onClick={handleSubmit} disabled={submitting}>
+              <Button onClick={handleSubmit} disabled={submitting || !dept}>
                 <CloudUpload className="mr-1.5 h-4 w-4" />
                 {submitting ? "提交中…" : "提交到创盟服务器"}
               </Button>
-              <Button
-                onClick={() => exportCard("front")}
-                disabled={exporting !== null}
-                variant="outline"
-              >
-                <Download className="mr-1.5 h-4 w-4" />
-                {exporting === "front" ? "导出中…" : "下载正面 PNG"}
-              </Button>
-              <Button
-                onClick={() => exportCard("back")}
-                disabled={exporting !== null}
-                variant="outline"
-              >
-                <Download className="mr-1.5 h-4 w-4" />
-                {exporting === "back" ? "导出中…" : "下载背面 PNG"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                  格式
+                </span>
+                <Select
+                  value={format}
+                  onValueChange={(v) => setFormat(v as ImageFormat)}
+                >
+                  <SelectTrigger id="format" className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="png">PNG（屏幕/网络用）</SelectItem>
+                    <SelectItem value="tiff">TIF（打印店通用）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => exportCard("front")}
+                  disabled={exporting !== null}
+                  variant="outline"
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  {exporting === "front" ? "导出中…" : "下载正面"}
+                </Button>
+                <Button
+                  onClick={() => exportCard("back")}
+                  disabled={exporting !== null}
+                  variant="outline"
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  {exporting === "back" ? "导出中…" : "下载背面"}
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                提交后管理员可在后台统一导出所有人的工作证；自行下载的 PNG 为
-                1224 × 1940 px（4 倍清晰度），可直接用于打印。
+                提交后管理员可在后台统一导出所有人的工作证。自行下载的图片为
+                1224 × 1940 px（4 倍清晰度）；交打印店制证建议选 TIF，无损且各打印店都收。
               </p>
             </CardContent>
           </Card>
