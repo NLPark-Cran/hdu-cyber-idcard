@@ -1,4 +1,4 @@
-import { toPng } from "html-to-image";
+import { toSvg } from "html-to-image";
 import JSZip from "jszip";
 import * as UTIF from "utif";
 
@@ -21,14 +21,33 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
 /** html 节点 → 4 倍清晰度 PNG dataURL */
 export async function nodeToPngDataUrl(node: HTMLElement): Promise<string> {
-  return toPng(node, { pixelRatio: 4 });
+  // 不走 html-to-image 的 toPng（其内部 Image 加载在部分环境永不回调），
+  // 改用 toSvg + 手动 Image/Canvas 栅格化，并补 onerror 快速失败。
+  const svgDataUrl = await toSvg(node, {});
+  const img = await loadImage(svgDataUrl);
+  const scale = 4;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/png");
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("图片加载失败"));
+    const timer = setTimeout(() => reject(new Error("图片加载超时")), 20000);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(img);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("图片加载失败"));
+    };
     img.src = src;
   });
 }

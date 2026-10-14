@@ -7,6 +7,10 @@ import { inspectAttr } from 'kimi-plugin-inspect-react'
 export default defineConfig({
   base: './',
   plugins: [inspectAttr(), react()],
+  build: {
+    // 字体以 data URI 内联，保证 html-to-image 导出时能同步嵌入文字（且避免导出卡死）
+    assetsInlineLimit: 100 * 1024,
+  },
   server: {
     port: 3000,
     proxy: {
