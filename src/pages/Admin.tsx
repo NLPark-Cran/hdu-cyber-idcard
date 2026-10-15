@@ -46,8 +46,15 @@ import {
   downloadZip,
   formatExt,
   nodeToBlob,
+  nodeToCanvas,
+  canvasToJpegBytes,
   type ImageFormat,
 } from "@/lib/exportImage";
+import {
+  buildPdf,
+  PDF_EXPORT_SCALE,
+  type PdfPageInput,
+} from "@/lib/exportPdf";
 import { parseImportZip } from "@/lib/importZip";
 
 const DEPTS = [
@@ -95,6 +102,7 @@ export default function Admin() {
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
   const [filterDept, setFilterDept] = useState("all");
+  const [frontOnce, setFrontOnce] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const frontRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLDivElement>(null);
@@ -209,6 +217,18 @@ export default function Admin() {
     []
   );
 
+  /** 把隐藏卡片渲染成 {正面, 背面} Canvas（PDF 用，较低倍率控制文件体积） */
+  const renderPairCanvases = useCallback(
+    async (): Promise<{ front: HTMLCanvasElement; back: HTMLCanvasElement }> => {
+      await delay(120);
+      await document.fonts.ready;
+      const front = await nodeToCanvas(frontRef.current!, PDF_EXPORT_SCALE);
+      const back = await nodeToCanvas(backRef.current!, PDF_EXPORT_SCALE);
+      return { front, back };
+    },
+    []
+  );
+
   const exportOne = async (rec: Submission, format: ImageFormat) => {
     setBusy(`${rec.id}-${format}`);
     try {
@@ -233,6 +253,7 @@ export default function Admin() {
     const ext = formatExt(format);
     const entries: { name: string; blob: Blob }[] = [];
     const list = filtered();
+    let frontSaved = false;
     try {
       for (let i = 0; i < list.length; i++) {
         const rec = list[i];
@@ -241,13 +262,69 @@ export default function Admin() {
         setExportProps({ photo, name: rec.name, dept: rec.dept });
         const { front, back } = await renderPair(format);
         const prefix = `${rec.dept ? rec.dept + "-" : ""}${rec.name}`;
-        entries.push({ name: `${prefix}-正面.${ext}`, blob: front });
+        // 正面无头像、人人相同：勾选后只保留一份通用正面
+        if (!frontOnce || !frontSaved) {
+          entries.push({
+            name: frontOnce ? `00-正面通用.${ext}` : `${prefix}-正面.${ext}`,
+            blob: front,
+          });
+          frontSaved = true;
+        }
         entries.push({ name: `${prefix}-背面.${ext}`, blob: back });
       }
       await downloadZip(entries, `工作证${filterDept === "all" ? "全部" : filterDept}-${format.toUpperCase()}.zip`);
       toast.success(`已导出 ${list.length} 人（${format.toUpperCase()}）`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "批量导出失败");
+    } finally {
+      setBusy(null);
+      setProgress("");
+    }
+  };
+
+  /** 单人 PDF：正面一页 + 背面一页（页面尺寸与参考 PDF 一致） */
+  const exportOnePdf = async (rec: Submission) => {
+    setBusy(`${rec.id}-pdf`);
+    try {
+      const photo = await photoDataUrl(rec);
+      setExportProps({ photo, name: rec.name, dept: rec.dept });
+      const { front, back } = await renderPairCanvases();
+      const pages: PdfPageInput[] = [
+        await canvasToJpegBytes(front),
+        await canvasToJpegBytes(back),
+      ];
+      const prefix = `${rec.dept ? rec.dept + "-" : ""}${rec.name}`;
+      downloadBlob(buildPdf(pages), `工作证-${prefix}.pdf`);
+      toast.success(`已导出 ${rec.name}（PDF）`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "PDF 导出失败");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** 批量 PDF 打印版：每人正面、背面各一页，合成一个 PDF */
+  const exportAllPdf = async () => {
+    setBusy("all-pdf");
+    const list = filtered();
+    const pages: PdfPageInput[] = [];
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const rec = list[i];
+        setProgress(`正在生成 PDF ${i + 1}/${list.length}：${rec.name}`);
+        const photo = await photoDataUrl(rec);
+        setExportProps({ photo, name: rec.name, dept: rec.dept });
+        const { front, back } = await renderPairCanvases();
+        pages.push(await canvasToJpegBytes(front));
+        pages.push(await canvasToJpegBytes(back));
+      }
+      downloadBlob(
+        buildPdf(pages),
+        `工作证${filterDept === "all" ? "全部" : filterDept}-打印版.pdf`
+      );
+      toast.success(`已导出 PDF 打印版（${list.length} 人，${pages.length} 页）`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "PDF 批量导出失败");
     } finally {
       setBusy(null);
       setProgress("");
@@ -436,6 +513,24 @@ export default function Admin() {
               {busy === `all-${f}` ? "导出中…" : `${f.toUpperCase()} ZIP`}
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={exportAllPdf}
+            disabled={busy !== null || records.length === 0}
+          >
+            <FileDown className="mr-1.5 h-4 w-4" />
+            {busy === "all-pdf" ? "生成中…" : "PDF 打印版"}
+          </Button>
+          <label className="flex items-center gap-1.5 text-sm text-muted-foreground select-none cursor-pointer">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-blue-700"
+              checked={frontOnce}
+              onChange={(e) => setFrontOnce(e.target.checked)}
+            />
+            正面只导一份（无头像，人人相同）
+          </label>
         </div>
         {progress && <p className="text-sm text-muted-foreground">{progress}</p>}
 
@@ -498,6 +593,14 @@ export default function Admin() {
                             {busy === `${rec.id}-${f}` ? "…" : f.toUpperCase()}
                           </Button>
                         ))}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy !== null}
+                          onClick={() => exportOnePdf(rec)}
+                        >
+                          {busy === `${rec.id}-pdf` ? "…" : "PDF"}
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
